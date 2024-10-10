@@ -1,0 +1,224 @@
+---
+title: "Practice Queries for SQL I"
+author: "Sarah Gallant"
+date: "06/05/2023"
+output: html_notebook
+---
+
+### Connect to DB
+```{r}
+library(RSQLite)
+
+#create new in-memory database
+dbcon <- dbConnect(RSQLite::SQLite(), ":memory:")
+```
+
+### Drop and Create tables in DB
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS projectmgr;
+```
+
+```{sql connection=dbcon}
+create table projectmgr (
+  pmid integer,
+  name text not null,
+  primary key (pmid)
+);
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS certifications;
+```
+
+```{sql connection=dbcon}
+create table certifications (
+  cid integer not null,
+  cert text not null,
+  body text not null,
+  primary key (cid)
+)
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS earnedcerts
+```
+
+```{sql connection=dbcon}
+create table earnedcerts (
+  pmid integer,
+  cert integer,
+  primary key (pmid,cert)
+  foreign key (pmid) references projectmgr(pmid)
+  foreign key (cert) references certifications(cid)
+);
+```
+
+
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS projects;
+```
+
+
+```{sql connection=dbcon}
+create table projects (
+  pid integer,
+  pname text default "No Name",
+  budget double default 0,
+  pmgr integer  not null,
+  primary key (pid),
+  foreign key (pmgr) references projectmgr(pmid)
+);
+```
+
+### Insert Data into Tables
+```{sql connection=dbcon}
+insert into certifications values
+  (1,"PMP","Project Management Institute"),
+  (2,"APM","Project Management Institute"),
+  (4,"CBAP","International Institute of Business Analysis"),
+  (5,"CIPM","American Academy of Project Management");
+```
+
+```{sql connection=dbcon}
+insert into projectmgr values
+  (11,"John Wu"),
+  (22,"Ann Molloy"),
+  (18,"Sandeep Ranghani"),
+  (19,"Alicia Knauss"),
+  (38,"Roxanna da Silva"),
+  (23,"Wagner Ormond"),
+  (47,"Margaret O'Shea"),
+  (20,"Alden White");
+```
+
+```{sql connection=dbcon}
+insert into earnedcerts values
+  (11,1),
+  (11,4),
+  (18,1),
+  (22,1),
+  (47,1),
+  (20,1),
+  (20,4),
+  (38,5);
+
+```
+
+```{sql connection=dbcon}
+insert into projects values
+  (100,"GOTAM",350000,11),
+  (200,"Data Twist",875000,20),
+  (300,"Alpha Launch",12500,18),
+  (302,"Alpha Arch Design",38000,18),
+  (303,"Alpha Dev",125000,18),
+  (305,"Alpha Analytics Dashboard",235000,38),
+  (811,"Bootstrap Demo",0,47);
+```
+
+## Sample Queries
+### list all info about PMs
+```{sql connection=dbcon}
+select * from projectmgr
+```
+
+```{sql connection=dbcon}
+select * from projects
+```
+
+
+```{sql connection=dbcon}
+select * from certifications
+```
+
+
+```{sql connection=dbcon}
+select * from earnedcerts
+```
+
+### list the names and budgets of all projects with a budget of more than $200K
+```{sql connection=dbcon}
+select p.pname, p.budget
+  FROM projects as p
+  where p.budget > 200000;
+```
+
+### find number of PMs
+```{sql connection=dbcon}
+select count(*) as 'NumPMs'
+  FROM projectmgr;
+```
+### list name of all PMs who manage at least one project, ordered alphabetically in desc order starting with 'A'
+```{sql connection=dbcon}
+SELECT distinct m.name
+  FROM projectmgr m join projects p on (m.pmid = p.pmgr)
+  ORDER BY m.name;
+```
+###list the names of all PMs who do not manage at least one project (all PM names unless they are matched/found in projs table)
+```{sql connection=dbcon}
+select name 
+  FROM projectmgr
+  except
+  select distinct m.name from projectmgr m join projects p on (m.pmid = p.pmgr)
+```
+
+### list all project names and the name of the PM
+```{sql connection=dbcon}
+select p.pname, m.name
+  FROM projects p join projectmgr m on (m.pmid = p.pmgr);
+```
+
+### total budget of all projects combined
+```{sql connection=dbcon}
+select sum(p.budget)
+  FROM projects p;
+```
+### which project managers have more than one certification?
+```{sql connection=dbcon}
+select m.name, count(*) as 'NumCerts'
+  FROM earnedcerts e join projectmgr m on (e.pmid = m.pmid)
+  GROUP BY e.pmid
+  having NumCerts > 1;
+```
+### List name of each PM, num projects they manage, and total combined budget of their projects
+```{sql connection=dbcon}
+select m.name, count(*) as 'NumProjecs', sum(p.budget) as 'TotalBudget'
+  FROM projectmgr m join projects p on (m.pmid = p.pmgr)
+  GROUP BY p.pmgr
+```
+### list all projects that have a project name that contains the text "alpha"
+```{sql connection=dbcon}
+select *
+  FROM projects p
+  WHERE p.pname like '%Alpha%';
+```
+
+### what is the average project budget?
+```{sql connection=dbcon}
+select avg(p.budget) from projects p
+```
+
+### which projects are within 10% of the average budget? (subquery on avg budget)
+```{sql connection=dbcon}
+select *
+  FROM projects p
+  WHERE p.budget > 0.9*(select avg(p.budget) from projects p)
+  and p.budget < 1.1*(select avg(p.budget) from projects p);
+```
+### which PMs do not have any certs? list their names (subquery distinct pmid from earnedcerts)
+```{sql connection=dbcon}
+select p.name
+  from projectmgr p
+  where p.pmid not in (select distinct e.pmid FROM earnedcerts e);
+    
+```
+
+## Disconnect from DB
+```{R}
+dbDisconnect(dbcon)
+```
+
+
+
+
+
